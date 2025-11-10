@@ -1,0 +1,681 @@
+Developing Applications on Google Cloud: Deploying and Maintaining Your Application
+experiment
+Lab
+schedule
+1 hour 30 minutes
+universal_currency_alt
+No cost
+show_chart
+Intermediate
+info
+This lab may incorporate AI tools to support your learning.
+Overview
+Artifact Registry provides a single location for storing and managing your packages and Docker container images.
+
+Cloud Build is a service that executes your builds on Google Cloud.
+
+Cloud Run is a managed compute platform that lets you run containers on Google's scalable infrastructure.
+
+Google Cloud Observability provides integrated monitoring, logging, and tracing managed services for applications.
+
+Cloud Client Libraries are the recommended method for calling Google Cloud APIs from your applications. Cloud Client Libraries use the natural conventions and style of the programming language that you're using for your application. Cloud Client Libraries handle low-level communication with the server, including authentication and retry logic.
+
+Google APIs use the OAuth 2.0 protocol for authentication and authorization.
+
+Secret Manager lets you store API keys, passwords, certificates, and other sensitive data as binary blobs or text strings.
+
+In this lab, you run a Python application in Cloud Shell, and then deploy the application to Cloud Run. You work through issues that arise when the application is moved to Cloud Run, and explore application development features of Google Cloud's operations suite.
+
+What you will learn
+In this lab, you learn to:
+
+Containerize and publish a Python web application to Artifact Registry.
+Deploy a containerized application to Cloud Run.
+Use logs to debug application issues.
+Add Error Reporting to an application.
+Setup and requirements
+Before you click the Start Lab button
+Note: Read these instructions.
+Labs are timed and you cannot pause them. The timer, which starts when you click Start Lab, shows how long Google Cloud resources will be made available to you.
+This Qwiklabs hands-on lab lets you do the lab activities yourself in a real cloud environment, not in a simulation or demo environment. It does so by giving you new, temporary credentials that you use to sign in and access Google Cloud for the duration of the lab.
+
+What you need
+To complete this lab, you need:
+
+Access to a standard internet browser (Chrome browser recommended).
+Time to complete the lab.
+Note: If you already have your own personal Google Cloud account or project, do not use it for this lab.
+Note: If you are using a Pixelbook, open an Incognito window to run this lab.
+How to start your lab and sign in to the Console
+Click the Start Lab button. If you need to pay for the lab, a pop-up opens for you to select your payment method. On the left is a panel populated with the temporary credentials that you must use for this lab.
+
+Credentials panel
+
+Copy the username, and then click Open Google Console. The lab spins up resources, and then opens another tab that shows the Choose an account page.
+
+Note: Open the tabs in separate windows, side-by-side.
+On the Choose an account page, click Use Another Account. The Sign in page opens.
+
+Choose an account dialog box with Use Another Account option highlighted 
+
+Paste the username that you copied from the Connection Details panel. Then copy and paste the password.
+
+Note: You must use the credentials from the Connection Details panel. Do not use your Google Cloud Skills Boost credentials. If you have your own Google Cloud account, do not use it for this lab (avoids incurring charges).
+Click through the subsequent pages:
+Accept the terms and conditions.
+Do not add recovery options or two-factor authentication (because this is a temporary account).
+Do not sign up for free trials.
+After a few moments, the Cloud console opens in this tab.
+
+Note: You can view the menu with a list of Google Cloud Products and Services by clicking the Navigation menu at the top-left. Cloud Console Menu
+Activate Google Cloud Shell
+Google Cloud Shell is a virtual machine that is loaded with development tools. It offers a persistent 5GB home directory and runs on the Google Cloud.
+
+Google Cloud Shell provides command-line access to your Google Cloud resources.
+
+In Cloud console, on the top right toolbar, click the Open Cloud Shell button.
+
+Highlighted Cloud Shell icon
+
+Click Continue.
+
+It takes a few moments to provision and connect to the environment. When you are connected, you are already authenticated, and the project is set to your PROJECT_ID. For example:
+
+Project ID highlighted in the Cloud Shell Terminal
+
+gcloud is the command-line tool for Google Cloud. It comes pre-installed on Cloud Shell and supports tab-completion.
+
+You can list the active account name with this command:
+gcloud auth list
+Copied!
+Output:
+
+Credentialed accounts:
+ - <myaccount>@<mydomain>.com (active)
+</mydomain></myaccount>
+Example output:
+
+Credentialed accounts:
+ - google1623327_student@qwiklabs.net
+You can list the project ID with this command:
+gcloud config list project
+Copied!
+Output:
+
+[core]
+project = <project_id>
+</project_id>
+Example output:
+
+[core]
+project = qwiklabs-gcp-44776a13dea667a6
+Note: Full documentation of gcloud is available in the gcloud CLI overview guide .
+Task 1. Set up the Python application and necessary resources
+In this task, you download the Python application and create the resources used by the current version of the app.
+
+Note: For most languages, indentation is used to make code more readable. Python uses indentation to indicate a block of code, so indentation must be correct. The number of spaces used for indentation must be consistent. Mixing space and tabs for indentation can also cause issues. This lab uses four spaces for Python indentation.
+Create the Firestore database
+To create the Firestore database, in Cloud Shell, run the following command:
+
+gcloud firestore databases create --location=us-east4
+Copied!
+The Firestore database is used to store book and user profile data.
+
+If you're asked to authorize Cloud Shell, click Authorize.
+
+Create the Cloud Storage bucket with the correct permissions
+To create the Cloud Storage bucket, run the following command:
+
+gcloud storage buckets create gs://${GOOGLE_CLOUD_PROJECT}-covers --location=us-east4 --no-public-access-prevention --uniform-bucket-level-access
+Copied!
+The Cloud Storage bucket is used to store book cover images. The bucket has uniform bucket level access and does not use public access prevention.
+
+Note: If the command fails and the error indicates that the account does not have any valid credentials, try the command again. The permissions for the Qwiklabs student account might not have propagated yet.
+To make all objects in the bucket publicly readable, run the following command:
+
+gcloud storage buckets add-iam-policy-binding gs://${GOOGLE_CLOUD_PROJECT}-covers --member=allUsers --role=roles/storage.legacyObjectReader
+Copied!
+Create the OAuth consent screen
+When you use OAuth 2.0 for authorization, your app requests one or more scopes of access from a Google Account. Google displays a consent screen to the user to capture the user's consent to share data with the application.
+
+In the Google Cloud console, select the Navigation menu (Navigation menu icon), and then select APIs & Services > OAuth consent screen.
+
+Click Get Started.
+
+For App name, enter Bookshelf.
+
+For User support email, select the student email.
+
+Click Next.
+
+For Audience, select Internal, and then click Next.
+
+Users with access to the project will be able to log in to the app.
+
+On the left panel of the lab instructions, copy the Username.
+
+Copy username
+
+For Email addresses, paste the copied username, and then click Next.
+
+Enable the checkbox to agree to the user data policy, and then click Continue.
+
+Click Create.
+
+In the navigation menu, click Branding.
+
+Click + Add Domain.
+
+In the Authorized domains section, for Authorized domain 1, enter cloudshell.dev.
+
+Click Save.
+
+In the navigation menu, click Data Access.
+
+Click Add or Remove Scopes.
+
+At the beginning of the list, select the box next to openid.
+
+For Filter, enter userinfo.profile, press Enter, and then select the box next to the .../auth/userinfo.profile scope.
+
+For Filter, clear the userinfo.profile filter, enter contacts, press Enter, and then select the box for the .../auth/contacts scope.
+
+Click Update.
+
+You should see two non-sensitive scopes (openid and userinfo.profile), and one sensitive scope (contacts).
+
+Click Save.
+
+Create the OAuth 2.0 credentials
+In the navigation menu, click Clients, and then click + Create Client.
+
+For Application type, select Web application.
+
+For Name, enter Bookshelf.
+
+For Authorized redirect URIs, click + Add URI.
+
+The URI specified here will be used when Google redirects the browser back to the application after capturing user consent.
+
+To get the redirect URI, in Cloud Shell, run the following command:
+
+echo "https://8080-${WEB_HOST}/oauth2callback"
+Copied!
+Copy the URI that was created by the echo command, and then, for URIs 1, paste in the URI.
+
+Click Create.
+
+Click Download JSON, and then save the client secret JSON to your local machine.
+
+The client secret file will be used to verify your app with Google.
+
+Click OK.
+
+In Cloud Shell, click More (More icon) in the top-right toolbar, and then click Upload.
+
+Click Choose Files, and select the client secret JSON file, and then click Open.
+
+Click Upload.
+
+The client secret JSON file is now available in the home directory. The contents of this file will be used during the OAuth process.
+
+Store client secret JSON in Secret Manager
+Secret Manager is a secure and recommended place to store the client secret JSON file.
+
+To enable the Secret Manager API, in Cloud Shell, run the following command:
+
+gcloud services enable secretmanager.googleapis.com
+Copied!
+To rename the client secret file, run the following command:
+
+mv ~/client_secret*.json ~/client_secret.json
+Copied!
+To create the secret, run the following command:
+
+gcloud secrets create bookshelf-client-secrets --data-file=$HOME/client_secret.json
+Copied!
+There is now a secret named bookshelf-client-secrets that can be accessed from your application.
+
+To create a secret for the Flask secret key, run the following command:
+
+tr -dc A-Za-z0-9 </dev/urandom | head -c 20 | gcloud secrets create flask-secret-key --data-file=-
+Copied!
+This command creates a random 20 character alphanumeric password, and then stores it in a secret named flask-secret-key.
+
+Copy the Python code to Cloud Shell
+To copy the Python code from a Cloud Storage bucket into the home directory, run the following command:
+
+gcloud storage cp gs://cloud-training/devapps-foundations/code/lab3/bookshelf.zip ~ && unzip ~/bookshelf.zip -d ~ && rm ~/bookshelf.zip
+Copied!
+To check the contents of the bookshelf directory, run the following command:
+
+cd ~
+ls -R bookshelf
+Copied!
+You should see a list that contains seven Python files, a requirements file, and six template files:
+
+bookshelf:
+booksdb.py  main.py  oauth.py  profiledb.py  requirements.txt  secrets.py  storage.py  templates  translate.py
+
+bookshelf/templates:
+base.html  error.html  form.html  list.html  profile.html  view.html
+Install the required dependencies
+To list the dependencies in the requirements file, run the following command:
+
+cat ~/bookshelf/requirements.txt
+Copied!
+The requirements file specifies the following dependencies:
+
+Flask: a web framework module used to design Python web applications
+Gunicorn: a Python HTTP server that runs on Linux
+Cloud Logging: used to log information from the application
+Firestore: a fast, fully managed, serverless, NoSQL document database built for ease of application development
+Cloud Storage: Google Cloud's unified object storage
+Secret Manager: secure storage for sensitive data
+Google support for OAuth 2.0: authentication and authorization for Google APIs
+Cloud Translation API: API to detect language of text and translate text to other languages
+To install the dependencies in the requirements file, run the following command:
+
+pip3 install -r ~/bookshelf/requirements.txt --user
+Copied!
+pip is the package installer for Python. This pip3 command installs the packages specified in the requirements.txt file for use with Python version 3.
+
+Test the application
+To start the HTTP server, run the following command:
+
+cd ~/bookshelf; EXTERNAL_HOST_URL="https://8080-${WEB_HOST}" ~/.local/bin/gunicorn -b :8080 main:app
+Copied!
+There is an environment variable being passed in to the application:
+
+EXTERNAL_HOST_URL specifies the scheme and hostname that should be used in the callback URL.
+The application is now hosted on port 8080.
+
+To run the application in the web browser, click Web Preview, and then select Preview on port 8080.
+
+Web Preview on port 8080
+
+A new tab is opened in the browser, and the application is running. This page displays a list of all existing books. There are no books yet.
+
+Note: If asked to authorize Cloud Shell, click Authorize.
+Right-click this Wizard of Oz book cover image, and save it to your computer as oz.png:
+
+Wizard of Oz book cover
+
+Click + Add book.
+
+You must be logged-in to add a book, so you're asked to choose an account for signing in with Google:
+
+Choose an account
+
+Click the student email, and then click Continue.
+
+Click Allow.
+
+Enter the following information into the form:
+
+Field	Value
+Title	Wonderful Wizard of Oz
+Author	Frank L. Baum
+Date Published	1900
+Description	There's no place like home!
+For Cover Image, click Choose File.
+
+Select the file that you downloaded (oz.png), and click Open.
+
+Click Save.
+
+You're returned to the view page, and your book details are shown. The book details are stored in the Firestore database, and the cover image is stored in Cloud Storage.
+
+Click the email address.
+
+The profile is displayed. The language select control should show English.
+
+Change the Preferred Language to Spanish, and then click Save.
+
+Click the Wonderful Wizard of Oz book.
+
+The view page now contains both the original English description and the Spanish translation.
+
+In Cloud Shell, to quit the application, enter CTRL-C.
+
+To verify the objective, click Check my progress.
+Please create the book with the specified information.
+Set up the Python application and necessary resources.
+Please create the book with the specified information.
+
+Task 2. Containerize and publish the application to Artifact Registry
+In this task, you use Cloud Build to containerize the application and publish it to Artifact Registry.
+
+Create the repository
+To create the Artifact Registry repository, in Cloud Shell, run the following command:
+
+gcloud artifacts repositories create app-repo \
+  --repository-format=docker \
+  --location=us-east4
+Copied!
+The repository will hold our application container.
+
+To show the repository details, run the following command:
+
+gcloud artifacts repositories describe app-repo \
+  --location=us-east4
+Copied!
+Build, containerize, and publish the application
+You can create your own Dockerfile to package your application into a Docker image, but Cloud Build can use buildpacks to build the container for you.
+
+To build the application using Cloud Build, run the following command:
+
+gcloud builds submit \
+  --pack image=us-east4-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/app-repo/bookshelf \
+  ~/bookshelf
+Copied!
+Note: If an error indicates that permission was denied, the required permissions for Cloud Build may not have propagated yet. Retry the command until the permissions propagate and the build completes. It may take a couple of minutes.
+The command builds the Docker image of the code in the ~/bookshelf directory and stores it in the app-repo repository in Artifact Registry.
+
+To see the list of builds, run the following command:
+
+gcloud builds list
+Copied!
+The bookshelf build is listed.
+
+To verify the objective, click Check my progress.
+Containerize and publish the application to Artifact Registry.
+
+Task 3. Deploy the app to Cloud Run and test the application
+In this task, you deploy the application to Cloud Run and then test the application in Cloud Run.
+
+Deploy the app to Cloud Run
+To deploy the application to Cloud Run, run the following command:
+
+gcloud run deploy bookshelf \
+  --image=us-east4-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/app-repo/bookshelf \
+  --region=us-east4 --allow-unauthenticated \
+  --update-env-vars=GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+Copied!
+Note: The EXTERNAL_HOST_URL environment variable is no longer needed.
+If you're asked to enable APIs, enter y.
+
+The command deploys the image we just built to Cloud Run. We specify that unauthenticated calls are allowed because users only need to log in when they want to create, modify, or delete books. The GOOGLE_CLOUD_PROJECT environment variable is provided to the application because it is not available in Cloud Run by default.
+
+Cloud Run deploys the application.
+
+Note: If you get an error indicating that run.googleapis.com cannot be accessed, the API enablement may not have propagated to Cloud Run yet. Repeat the Cloud Run command until it works.
+To get the application URL, run the following command:
+
+echo "https://bookshelf-$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format="value(projectNumber)").us-east4.run.app"
+Copied!
+Click the link created by the previous command.
+
+A new tab should open and the message "Service Unavailable" (or another error) is shown.
+
+The application is not running correctly: we must figure out why.
+
+To verify the objective, click Check my progress.
+Deploy the app to Cloud Run.
+
+Task 4. Find the issue and fix the application
+In this task, you use logs to help fix the issue.
+
+Find the issue by using the logs
+When you encounter an issue with your application, logs in Cloud Logging can often help you fix the issue.
+
+In the Google Cloud console, select the Navigation menu (Navigation menu icon), and then select Cloud Run.
+
+Click bookshelf, and then click the Logs tab.
+
+The logs are specific to the Bookshelf application on Cloud Run. If you look through the logs, you should see a permission denied error for secretmanager.versions.access.
+
+When the app is running in Cloud Shell, the application is using the credentials of the logged-in user. Your student user can access items in Secret Manager, write files to Cloud Storage, and call the Translation API.
+
+Unless you supply a service account, Cloud Run applications use the Compute Engine default service account. This default service account does not have those permissions.
+
+It is a best practice to create a service account specific to your application, attach it to the application, and then provide the correct permissions to the service account.
+
+Create the service account and redeploy
+To create a service account for the application, in Cloud Shell, run the following command:
+
+gcloud iam service-accounts create bookshelf-run-sa
+Copied!
+You haven't added any permissions yet. To determine the correct role to add, you can look at the IAM basic and predefined roles reference. The Secret Manager roles include the Secret Manager Secret Accessor role, which should provide the minimal permissions for accessing secrets.
+
+Note: You can use an iterative process to figure out the permissions to add until the application runs correctly. For this lab, you will grant the required permissions to the service account without going through this process.
+To add the required roles, run the following commands:
+
+gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
+  --member="serviceAccount:bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
+  --member="serviceAccount:bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/cloudtranslate.user"
+gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
+  --member="serviceAccount:bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/datastore.user"
+gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
+  --member="serviceAccount:bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/storage.objectUser"
+Copied!
+The permissions are for the Secret Manager, the Cloud Translation API, Firestore, and Cloud Storage.
+
+The running application will not immediately pick up the permissions, but it will within a few minutes. To avoid the delay, the app can be redeployed.
+
+To redeploy the application with a service account, run the following command:
+
+gcloud run deploy bookshelf \
+  --image=us-east4-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/app-repo/bookshelf \
+  --region=us-east4 --allow-unauthenticated \
+  --update-env-vars=GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT} \
+  --service-account=bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com
+Copied!
+To open the application, run the following command, and then click the link:
+
+echo "https://bookshelf-$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format="value(projectNumber)").us-east4.run.app"
+Copied!
+You may see an error. This error occurs because the permissions for the service account may have not yet propagated.
+
+If you look at the Bookshelf logs for the Cloud Run service, you can see errors, which may include Missing or insufficient permissions. The app will fail until the permissions are propagated and the service account can call the required Google Cloud services.
+
+Until the app successfully opens, close the application tab, and click the generated URL again.
+
+When the permissions have been propagated, the familiar Books page will be displayed.
+
+Test and fix OAuth
+In the application, click Login.
+
+The login fails.
+
+The error message indicates that access is blocked, the app sent an invalid request, and the error is a redirect URI mismatch. This error is occurring because the OAuth configuration is only set up for running in cloudshell.dev, not the Cloud Run service URL.
+
+In the Google Cloud console, select the Navigation menu (Navigation menu icon), then select APIs & Services > OAuth consent screen, and then select Branding.
+
+Click + Add Domain.
+
+In Cloud Shell, run the following command:
+
+echo "bookshelf-$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format="value(projectNumber)").us-east4.run.app"
+Copied!
+The command builds the application's URL without the https://.
+
+Copy the domain name into the clipboard, and then paste it in Authorized domain 2.
+
+Click Save.
+
+In the navigation menu, select Clients.
+
+In OAuth 2.0 Client IDs, click Bookshelf.
+
+For Authorized redirect URIs, click + Add URI.
+
+To get the redirect URI, in Cloud Shell, run the following command:
+
+echo "https://bookshelf-$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format="value(projectNumber)").us-east4.run.app/oauth2callback"
+Copied!
+Copy the URI that was created by the echo command, and then, for URIs 2, paste in the URI.
+
+Click Save.
+
+The secret is only loaded once for the application, so you need to redeploy the application.
+
+For your fix to take effect, redeploy the app with the following command:
+
+gcloud run deploy bookshelf \
+  --image=us-east4-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/app-repo/bookshelf \
+  --region=us-east4 --allow-unauthenticated \
+  --update-env-vars=GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT} \
+  --service-account=bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com
+Copied!
+When the application is deployed, run the following command, and then click the generated URL:
+
+echo "https://bookshelf-$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format="value(projectNumber)").us-east4.run.app"
+Copied!
+The application is up and running.
+
+In the application, click Login, and then log the user in by providing consent.
+
+The email address is now a link.
+
+Click the email address.
+
+The preferred language is still Spanish.
+
+To verify the objective, click Check my progress.
+Fix the application.
+
+Task 5. Explore features of Google Cloud Observability
+In this task, you explore some of the features of Google Cloud Observability that can be used to maintain the health of your application.
+
+Add Error Reporting to the application
+Error Reporting aggregates errors in your running cloud services.
+
+To add the required role to the service account, in Cloud Shell, run the following command:
+
+gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
+  --member="serviceAccount:bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/errorreporting.writer"
+Copied!
+In Cloud Shell, in a file editor, open the ~/bookshelf/requirements.txt file.
+
+Add the following line:
+
+google-cloud-error-reporting==1.12.0
+Copied!
+The requirements.txt file should now look like this:
+
+Flask==3.1.1
+gunicorn==23.0.0
+google-cloud-logging==3.12.1
+google-cloud-firestore==2.21.0
+google-cloud-storage==2.17.0
+google-cloud-secret-manager==2.24.0
+google-api-python-client==2.178.0
+google-auth==2.40.3
+google-auth-oauthlib==1.2.2
+google-cloud-translate==3.21.1
+google-cloud-error-reporting==1.12.0
+Save the file.
+
+To install the updated dependencies, run the following command:
+
+pip3 install -r ~/bookshelf/requirements.txt --user
+Copied!
+In a file editor, open the file ~/bookshelf/main.py.
+
+On the line after the cloud_logging import statement, add the following code:
+
+from google.cloud import error_reporting
+Copied!
+After the bottom of the /profile endpoint, add the following code:
+
+
+@app.route('/raiseerror')
+def raise_error():
+    """
+    Manually raise an error.
+    """
+    log_request(request)
+
+    print('raise_error()')
+    error_client = error_reporting.Client()
+    error_message = 'Intentionally Created Error'
+    error_client.report(
+        message=error_message,
+        http_context=error_reporting.build_flask_context(request),
+    )
+    session['error_message'] = f"{error_message}"
+    return redirect(url_for('.error'))
+Copied!
+Calling the /raiseerror endpoint will simulate an error by raising an error to Error Reporting and redirecting to the error page.
+
+Save the file.
+
+To build and redeploy the application, run the following commands:
+
+gcloud builds submit \
+  --pack image=us-east4-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/app-repo/bookshelf \
+  ~/bookshelf
+gcloud run deploy bookshelf \
+  --image=us-east4-docker.pkg.dev/${GOOGLE_CLOUD_PROJECT}/app-repo/bookshelf \
+  --region=us-east4 --allow-unauthenticated \
+  --update-env-vars=GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT} \
+  --service-account=bookshelf-run-sa@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com
+Copied!
+When the application is deployed, run the following command, and then click the generated URL:
+
+echo "https://bookshelf-$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format="value(projectNumber)").us-east4.run.app"
+Copied!
+Add /raiseerror to the end of the URL, and then click Enter.
+
+You're redirected to the application error page, with the error Intentionally Created Error.
+
+Replace error with raiseerror in the URL, and then click Enter.
+
+You're redirected to the application error page again. You will look at these errors in a later step.
+
+To verify the objective, click Check my progress.
+Add Error Reporting to the application.
+
+Explore the Cloud Run service details page
+The Cloud Run service details page contains built-in dashboards that will help you manage your service.
+
+In the Google Cloud console, select the Navigation menu (Navigation menu icon), and then select Cloud Run.
+
+Click bookshelf.
+
+The Metrics tab is shown.
+
+Click Last 1 day, and then select Last 1 hour.
+
+The Metrics tab shows a list of service invocations that have happened over the past hour, and graphs of metrics that are automatically collected.
+
+Click the Logs tab.
+
+All logs for the Cloud Run service can be explored on this tab.
+
+Explore Cloud Logging
+On the Google Cloud console title bar, in the Search field, type Logging, click Search, and then click Logging.
+
+All logs are accessible here.
+
+From the All resources drop down menu, select Cloud Run Revision, then click Apply.
+
+All Cloud Run logs are shown here. You can filter by service name or revision name.
+
+For Severity, click Error.
+
+The errors raised in the application are shown here. If you had more applications, using more services, it would be difficult to distinguish the different sources of errors from this view.
+
+Explore Error Reporting
+On the Google Cloud console title bar, in the Search field, type Error Reporting, click Search, and then click Error Reporting.
+
+Errors are grouped on this page. Many of the errors were automatically created when the Python application in Cloud Run crashed. The manually raised error is also shown.
+
+Click 1 hour.
+
+Click Intentionally Created Error.
+
+Similar errors are grouped here. Grouping errors can help you debug issues.
+
+On one of the samples, click View Logs.
+
+This link takes you back to Cloud Logging to this log entry. You can pin a logged error and explore logs that happened around the same time.
+
+Note: In a real application, you should try to log any errors and information that might help you track down issues you encounter.
